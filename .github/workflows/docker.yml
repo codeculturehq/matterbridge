@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - 'master'
+      - 'feature/slack-socket-mode'
     tags:
       - 'v*'
   pull_request:
@@ -13,56 +14,51 @@ on:
 jobs:
   docker:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
-      -
-        name: Checkout
-        uses: actions/checkout@v2
-      -
-        name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
         with:
           platforms: amd64,arm64
-      -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-      -
-        name: Docker meta
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v3
+        uses: docker/metadata-action@v5
         with:
-          images: 42wim/matterbridge,ghcr.io/42wim/matterbridge
+          images: ghcr.io/codeculturehq/matterbridge
           flavor: |
-            latest=true
+            latest=auto
           tags: |
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
-            type=semver,pattern=stable
-            type=semver,pattern={{major}}
             type=semver,pattern={{major}}.{{minor}}
-      -
-        name: Login to DockerHub
-        uses: docker/login-action@v1 
-        if: github.event_name != 'pull_request'
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      -
-        name: Log into registry ghcr.io
-        uses: docker/login-action@v1
+            type=raw,value=socket-mode,enable=${{ github.ref == 'refs/heads/feature/slack-socket-mode' }}
+
+      - name: Log into registry ghcr.io
+        uses: docker/login-action@v3
         if: github.event_name != 'pull_request'
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      -
-        name: Build and push
+
+      - name: Build and push
         id: docker_build
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v5
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
